@@ -1,6 +1,6 @@
 {
-  "name": "@capacitor-mobi/http",
-  "version": "6.0.0",
+  "name": "@leadscout/http",
+  "version": "6.0.1",
   "description": "A native HTTP plugin for CORS-free requests and file transfers",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -45,7 +45,7 @@
     "dist/",
     "ios/",
     "android/",
-    "CapacitorMobiHttp.podspec"
+    "LeadscoutHttp.podspec"
   ],
   "keywords": [
     "capacitor",
@@ -63,7 +63,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/capacitor-community/http"
+    "url": "https://github.com/Homscout/http"
   },
   "bugs": {
     "url": "https://github.com/capacitor-community/http/issues"

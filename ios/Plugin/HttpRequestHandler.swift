@@ -124,18 +124,18 @@ class HttpRequestHandler {
 
     private static func generateMultipartForm(_ url: URL, _ name: String, _ boundary: String, _ body: [String:Any]) throws -> Data {
         var data = Data()
+        var remainingBody = body
 
-        let fileData = try Data(contentsOf: url)
+        // Handle 'key' field first
+        if let keyValue = body["key"] as? String {
+            data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
+            data.append("Content-Disposition: form-data; name=\"key\"\r\n\r\n".data(using: .utf8)!)
+            data.append(keyValue.data(using: .utf8)!)
+            remainingBody.removeValue(forKey: "key")
+        }
 
-        let fname = url.lastPathComponent
-        let mimeType = FilesystemUtils.mimeTypeForPath(path: fname)
-        data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-        data.append(
-          "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fname)\"\r\n".data(
-            using: .utf8)!)
-        data.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-        data.append(fileData)
-        body.forEach { key, value in
+        // Handle remaining fields
+        remainingBody.forEach { key, value in
             if let stringArray = value as? [String] {
                 for item in stringArray {
                     data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
@@ -148,11 +148,22 @@ class HttpRequestHandler {
                 data.append((value as! String).data(using: .utf8)!)
             }
         }
+
+        // Add file data
+        let fileData = try Data(contentsOf: url)
+        let fname = url.lastPathComponent
+        let mimeType = FilesystemUtils.mimeTypeForPath(path: fname)
+        data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
+        data.append(
+            "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fname)\"\r\n".data(
+                using: .utf8)!)
+        data.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        data.append(fileData)
+
         data.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
         return data
     }
-
 
     public static func request(_ call: CAPPluginCall, _ httpMethod: String?) throws {
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
