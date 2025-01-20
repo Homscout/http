@@ -97,6 +97,39 @@ public class FormUploader {
      * @throws IOException Thrown if unable to parse the OutputStream of the connection
      */
     public void addFilePart(String fieldName, File uploadFile, JSObject data) throws IOException {
+        // First, add the 'key' field if it exists
+        if (data != null && data.has("key")) {
+            try {
+                appendFieldToWriter("key", data.getString("key"));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // Then add all other fields (except 'key' since we already handled it)
+        if (data != null) {
+            Iterator<String> keyIterator = data.keys();
+            while (keyIterator.hasNext()) {
+                String key = keyIterator.next();
+                if (!key.equals("key")) { // Skip 'key' as we've already handled it
+                    try {
+                        Object value = data.get(key);
+
+                        if (value instanceof String) {
+                            appendFieldToWriter(key, value.toString());
+                        } else if (value instanceof String[]) {
+                            for (String childValue : (String[]) value) {
+                                appendFieldToWriter(key, childValue);
+                            }
+                        }
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        // Finally add the file part
         String fileName = uploadFile.getName();
         prWriter
             .append(LINE_FEED)
@@ -123,26 +156,6 @@ public class FormUploader {
         }
         outputStream.flush();
         inputStream.close();
-
-        if (data != null) {
-            Iterator<String> keyIterator = data.keys();
-            while (keyIterator.hasNext()) {
-                String key = keyIterator.next();
-                try {
-                    Object value = data.get(key);
-
-                    if (value instanceof String) {
-                        appendFieldToWriter(key, value.toString());
-                    } else if (value instanceof String[]) {
-                        for (childValue : value) {
-                            appendFieldToWriter(key, childValue.toString());
-                        }
-                    }
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
 
         prWriter.append(LINE_FEED).append("--").append(boundary).append("--").append(LINE_FEED);
         prWriter.flush();

@@ -20,6 +20,7 @@ export interface HttpPlugin {
   deleteCookie(options: HttpSingleCookieOptions): Promise<void>;
 
   uploadFile(options: HttpUploadFileOptions): Promise<HttpUploadFileResult>;
+  uploadImage(options: HttpUploadImageOptions): Promise<HttpUploadFileResult>;
   chunkUpload(options: HttpUploadFileOptions): Promise<HttpUploadFileResult>;
   downloadFile(
     options: HttpDownloadFileOptions,
@@ -28,7 +29,7 @@ export interface HttpPlugin {
   addListener(
     eventName: 'progress',
     listenerFunc: HttpProgressListener,
-  ): Promise<PluginListenerHandle> & PluginListenerHandle;
+  ): Promise<PluginListenerHandle>;
 
   removeAllListeners(): Promise<void>;
 }
@@ -125,6 +126,49 @@ export interface HttpUploadFileOptions extends HttpOptions {
    * If this option is used, filePath can be a relative path rather than absolute
    */
   fileDirectory?: Directory;
+}
+
+export interface HttpUploadImageOptions extends HttpOptions {
+  /**
+   * The URL to upload the file to
+   */
+  url: string;
+  /**
+   * The field name to upload the file with
+   */
+  name: string;
+  /**
+   * For uploading a file natively, the path to the file on disk to upload
+   */
+  filePath: string;
+  /**
+   * Optionally, the directory to look for the file in.
+   *
+   * If this option is used, filePath can be a relative path rather than absolute
+   */
+  fileDirectory?: Directory;
+
+  resize?: {
+    maxWidth?: number;
+    maxHeight?: number;
+    quality?: number; // 0-100
+    format?: 'jpg' | 'png'; // Default jpg
+  };
+
+  /**
+   * Optional name override of "width" metadata header. Defaults to X-Image-Width
+   */
+  widthHeader?: string;
+
+  /**
+   * Optional name override of "height" metadata header. Defaults to X-Image-Height
+   */
+  heightHeader?: string;
+
+  /**
+   * Optional name override of "size" metadata header. Defaults to X-Image-Size
+   */
+  sizeHeader?: string;
 }
 
 export interface HttpCookie {

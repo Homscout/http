@@ -1,6 +1,6 @@
 # Example Server
 
-This example server can be used when testing the example Android and iOS applications in the `/example` folder of the `@capacitor-mobi/http` repo
+This example server can be used when testing the example Android and iOS applications in the `/example` folder of the `@leadscout/http` repo
 
 ## Routes
 

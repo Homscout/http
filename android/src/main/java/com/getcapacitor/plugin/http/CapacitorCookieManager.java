@@ -21,7 +21,7 @@ public class CapacitorCookieManager extends CookieManager {
     private final android.webkit.CookieManager webkitCookieManager;
 
     /**
-     * Create a new cookie manager for use with @capacitor-mobi/http with the default cookie
+     * Create a new cookie manager for use with @leadscout/http with the default cookie
      * store and policy
      */
     public CapacitorCookieManager() {
@@ -29,7 +29,7 @@ public class CapacitorCookieManager extends CookieManager {
     }
 
     /**
-     * Create a new cookie manager for use with @capacitor-mobi/http with specified cookie
+     * Create a new cookie manager for use with @leadscout/http with specified cookie
      * store and cookie policy.
      * @param store a {@code CookieStore} to be used by cookiemanager. if {@code null}, cookie
      *              manager will use a default one, which is an in-memory CookieStore implementation.

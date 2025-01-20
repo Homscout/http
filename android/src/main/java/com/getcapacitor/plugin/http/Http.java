@@ -5,6 +5,7 @@ import android.util.Log;
 import com.getcapacitor.CapConfig;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -65,7 +66,7 @@ public class Http extends Plugin {
     }
 
     private boolean isStoragePermissionGranted(PluginCall call, String permission) {
-        if (hasPermission(permission)) {
+        if (getPermissionState(permission) == PermissionState.GRANTED) {
             Log.v(getLogTag(), "Permission '" + permission + "' is granted");
             return true;
         } else {
@@ -178,6 +179,25 @@ public class Http extends Plugin {
 
     @PluginMethod
     public void uploadFile(PluginCall call) {
+        try {
+            String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+            bridge.saveCall(call);
+
+            if (
+                !FilesystemUtils.isPublicDirectory(fileDirectory) ||
+                isStoragePermissionGranted(call, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            ) {
+                call.release(bridge);
+                JSObject response = HttpRequestHandler.uploadFile(call, getContext());
+                call.resolve(response);
+            }
+        } catch (Exception ex) {
+            call.reject("Error", ex);
+        }
+    }
+
+    @PluginMethod
+    public void uploadImage(PluginCall call) {
         try {
             String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
             bridge.saveCall(call);

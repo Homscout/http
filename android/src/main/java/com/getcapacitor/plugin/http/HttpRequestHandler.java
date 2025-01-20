@@ -4,6 +4,7 @@ import static com.getcapacitor.plugin.http.MimeType.APPLICATION_JSON;
 import static com.getcapacitor.plugin.http.MimeType.APPLICATION_VND_API_JSON;
 
 import android.content.Context;
+import android.graphics.BitmapFactory;
 import android.text.TextUtils;
 import android.util.Base64;
 import com.getcapacitor.JSArray;
@@ -481,22 +482,18 @@ public class HttpRequestHandler {
      * @throws URISyntaxException thrown when the URI is malformed
      * @throws JSONException thrown when malformed JSON is passed into the function
      */
-    public static JSObject uploadFile(PluginCall call, Context context) throws IOException, URISyntaxException, JSONException {
+    private static JSObject performUpload(PluginCall call, Context context, File file, JSObject data)
+        throws IOException, URISyntaxException, JSONException {
         String urlString = call.getString("url");
         String method = call.getString("method", "POST").toUpperCase();
-        String filePath = call.getString("filePath");
-        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
         String name = call.getString("name", "file");
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
         JSObject headers = call.getObject("headers");
         JSObject params = call.getObject("params");
-        JSObject data = call.getObject("data");
         ResponseType responseType = ResponseType.parse(call.getString("responseType"));
 
         URL url = new URL(urlString);
-
-        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
 
         HttpURLConnectionBuilder connectionBuilder = new HttpURLConnectionBuilder()
             .setUrl(url)
@@ -515,6 +512,47 @@ public class HttpRequestHandler {
         builder.finish();
 
         return buildResponse(connection, responseType);
+    }
+
+    public static JSObject uploadFile(PluginCall call, Context context) throws IOException, URISyntaxException, JSONException {
+        String filePath = call.getString("filePath");
+        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
+        return performUpload(call, context, file, call.getObject("data"));
+    }
+
+    public static JSObject uploadImage(PluginCall call, Context context) throws IOException, URISyntaxException, JSONException {
+        String filePath = call.getString("filePath");
+        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
+
+        // Get header names from options or use defaults
+        String widthHeader = call.getString("widthHeader", "X-Image-Width");
+        String heightHeader = call.getString("heightHeader", "X-Image-Height");
+        String sizeHeader = call.getString("sizeHeader", "X-File-Size");
+
+        // Get existing data or create new
+        JSObject data = call.getObject("data", new JSObject());
+        File uploadFile;
+
+        JSObject resizeOptions = call.getObject("resize");
+        if (resizeOptions != null) {
+            ImageUtils.ImageResult result = ImageUtils.resizeImage(context, file, resizeOptions);
+            uploadFile = result.file;
+            data.put(widthHeader, String.valueOf(result.width));
+            data.put(heightHeader, String.valueOf(result.height));
+            data.put(sizeHeader, String.valueOf(result.fileSize));
+        } else {
+            uploadFile = file;
+            BitmapFactory.Options bmOptions = new BitmapFactory.Options();
+            bmOptions.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(file.getAbsolutePath(), bmOptions);
+            data.put(widthHeader, String.valueOf(bmOptions.outWidth));
+            data.put(heightHeader, String.valueOf(bmOptions.outHeight));
+            data.put(sizeHeader, String.valueOf(file.length()));
+        }
+
+        return performUpload(call, context, file, data);
     }
 
     @FunctionalInterface
