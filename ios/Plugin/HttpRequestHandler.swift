@@ -122,45 +122,15 @@ class HttpRequestHandler {
         return output
     }
 
-    private static func generateMultipartForm(_ url: URL, _ name: String, _ boundary: String, _ body: [String:Any]) throws -> Data {
-        var data = Data()
-
-        let fileData = try Data(contentsOf: url)
-
-        let fname = url.lastPathComponent
-        let mimeType = FilesystemUtils.mimeTypeForPath(path: fname)
-        data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-        data.append(
-          "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fname)\"\r\n".data(
-            using: .utf8)!)
-        data.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-        data.append(fileData)
-        body.forEach { key, value in
-            if let stringArray = value as? [String] {
-                for item in stringArray {
-                    data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-                    data.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".data(using: .utf8)!)
-                    data.append(item.data(using: .utf8)!)
-                }
-            } else {
-                data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-                data.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".data(using: .utf8)!)
-                data.append((value as! String).data(using: .utf8)!)
-            }
-        }
-        data.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-
-        return data
-    }
-
+   
 
     public static func request(_ call: CAPPluginCall, _ httpMethod: String?) throws {
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
         guard let method = httpMethod ?? call.getString("method") else { throw URLError(.dataNotAllowed) }
 
-        let headers = (call.getObject("headers") ?? [:]) as! [String: String]
-        let params = (call.getObject("params") ?? [:]) as! [String: Any]
-        let responseType = call.getString("responseType") ?? "text";
+        let headers = call.getObject("headers",  [:]) as! [String: String]
+        let params = call.getObject("params", [:])
+        let responseType = call.getString("responseType", "text");
         let connectTimeout = call.getDouble("connectTimeout");
         let readTimeout = call.getDouble("readTimeout");
 
@@ -205,41 +175,43 @@ class HttpRequestHandler {
         task.resume();
     }
 
-    public static func upload(_ call: CAPPluginCall) throws {
-        let name = call.getString("name") ?? "file"
-        let method = call.getString("method") ?? "POST"
+    private static func performUpload(_ call: CAPPluginCall) throws {
         let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
-        let headers = (call.getObject("headers") ?? [:]) as! [String: String]
-        let params = (call.getObject("params") ?? [:]) as! [String: Any]
-        let body = (call.getObject("data") ?? [:]) as [String: Any]
-        let responseType = call.getString("responseType") ?? "text";
-        let connectTimeout = call.getDouble("connectTimeout");
-        let readTimeout = call.getDouble("readTimeout");
+        guard let filePath = call.getString("filePath"),
+              let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else {
+            throw URLError(.badURL)
+        }
+        let method = call.getString("method", "POST")
+        let params = call.getObject("params", [:])
+        let headers = call.getObject("headers", [:]) as! [String: String]
+        let responseType = call.getString("responseType", "text")
 
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
-        guard let filePath = call.getString("filePath") else { throw URLError(.badURL) }
-        guard let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else { throw URLError(.badURL) }
-
+                
         let request = try! CapacitorHttpRequestBuilder()
             .setUrl(urlString)
             .setMethod(method)
             .setUrlParams(params)
             .openConnection()
-            .build();
-
-        request.setRequestHeaders(headers)
-
-        // Timeouts in iOS are in seconds. So read the value in millis and divide by 1000
-        let timeout = (connectTimeout ?? readTimeout ?? 600000.0) / 1000.0;
-        request.setTimeout(timeout)
+            .build()
 
         let boundary = UUID().uuidString
-        request.setContentType("multipart/form-data; boundary=\(boundary)");
-
-        guard let form = try? generateMultipartForm(fileUrl, name, boundary, body) else { throw URLError(.cannotCreateFile) }
-
-        let urlRequest = request.getUrlRequest();
-        let task = URLSession.shared.uploadTask(with: urlRequest, from: form) { (data, response, error) in
+        request.setRequestHeaders(headers)
+        request.setContentType("multipart/form-data; boundary=\(boundary)")
+        
+        // Create an upload operation
+        let operation = UploadOperation(
+            urlRequest: request.getUrlRequest(),
+            fileUrl: fileUrl,
+            body: call.getObject("data",  [:]) as [String: Any],
+            boundary: boundary,
+            name: call.getString("name", "file"),
+            uploadId: call.getString("id", UUID().uuidString),
+            resizeOptions: call.getObject("resize"),
+            widthHeader: call.getString("widthHeader", "X-Image-Width"),
+            heightHeader: call.getString("heightHeader", "X-Image-Height"),
+            sizeHeader: call.getString("sizeHeader", "X-Image-Size")
+        ) { data, response, error in
             if error != nil {
                 CAPLog.print("Error on upload file", String(describing: data), String(describing: response), String(describing: error))
                 call.reject("Error", "UPLOAD", error, [:])
@@ -249,17 +221,26 @@ class HttpRequestHandler {
             call.resolve(self.buildResponse(data, response as! HTTPURLResponse, responseType: type))
         }
 
-        task.resume()
+        // Add to queue instead of starting immediately
+        UploadQueue.shared.addUpload(operation)
+    }
+
+    public static func upload(_ call: CAPPluginCall) throws {
+        try performUpload(call)
+    }
+
+    public static func uploadImage(_ call: CAPPluginCall) throws {
+        try performUpload(call)
     }
 
     public static func download(_ call: CAPPluginCall, updateProgress: @escaping ProgressEmitter) throws {
-        let method = call.getString("method") ?? "GET"
-        let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
-        let headers = (call.getObject("headers") ?? [:]) as! [String: String]
-        let params = (call.getObject("params") ?? [:]) as! [String: Any]
+        let method = call.getString("method",  "GET")
+        let fileDirectory = call.getString("fileDirectory",  "DOCUMENTS")
+        let headers = call.getObject("headers", [:]) as! [String: String]
+        let params = call.getObject("params",  [:])
         let connectTimeout = call.getDouble("connectTimeout");
         let readTimeout = call.getDouble("readTimeout");
-        let progress = call.getBool("progress") ?? false
+        let progress = call.getBool("progress", false)
 
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
         guard let filePath = call.getString("filePath") else { throw URLError(.badURL) }
@@ -321,7 +302,7 @@ class HttpRequestHandler {
                 try FilesystemUtils.createDirectoryForFile(dest, true)
 
                 try fileManager.moveItem(at: location, to: dest)
-                call.resolve(["status": httpResponse?.statusCode, "path": dest.absoluteString])
+                call.resolve(["status": httpResponse?.statusCode as Any, "path": dest.absoluteString])
             } catch let e {
                 call.reject("Unable to download file", "DOWNLOAD", e)
                 return

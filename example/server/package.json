@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "version": "0.1.0",
-  "description": "Example server for @capacitor-mobi/http with Hapi.js",
+  "description": "Example server for @leadscout/http with Hapi.js",
   "main": "server.mjs",
   "scripts": {
     "start": "node --experimental-specifier-resolution=node dist/server.js",

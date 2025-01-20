@@ -1,15 +1,20 @@
 package com.getcapacitor.plugin.http;
 
 import android.Manifest;
+import android.os.Build;
 import android.util.Log;
 import com.getcapacitor.CapConfig;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+
+import java.io.File;
 import java.io.IOException;
 import java.net.HttpCookie;
 import java.net.MalformedURLException;
@@ -21,14 +26,11 @@ import java.net.URI;
 @CapacitorPlugin(
     name = "Http",
     permissions = {
-        @Permission(strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }, alias = "HttpWrite"),
-        @Permission(strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }, alias = "HttpRead")
+        @Permission(strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE }, alias = "publicStorage"),
     }
 )
 public class Http extends Plugin {
-
-    public static final int HTTP_REQUEST_DOWNLOAD_WRITE_PERMISSIONS = 9022;
-    public static final int HTTP_REQUEST_UPLOAD_READ_PERMISSIONS = 9023;
+    static final String PUBLIC_STORAGE = "publicStorage";
 
     CapConfig capConfig;
     CapacitorCookieManager cookieManager;
@@ -64,13 +66,34 @@ public class Http extends Plugin {
         }
     }
 
-    private boolean isStoragePermissionGranted(PluginCall call, String permission) {
-        if (hasPermission(permission)) {
-            Log.v(getLogTag(), "Permission '" + permission + "' is granted");
+    @PermissionCallback
+    private void permissionCallback(PluginCall call) {
+        if (!isStoragePermissionGranted(call)) {
+            Log.w(getLogTag(), "User denied storage permission");
+            call.reject("Unable to do file operation, user denied permission request");
+            return;
+        }
+
+        switch (call.getMethodName()) {
+            case "downloadFile":
+                downloadFile(call);
+                break;
+            case "uploadFile":
+                uploadFile(call);
+                break;
+            case "uploadImage":
+                uploadImage(call);
+                break;
+        }
+    }
+
+    private boolean isStoragePermissionGranted(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R || getPermissionState(PUBLIC_STORAGE) == PermissionState.GRANTED) {
+            Log.v(getLogTag(), "Permission '" + PUBLIC_STORAGE + "' is granted");
             return true;
         } else {
-            Log.v(getLogTag(), "Permission '" + permission + "' denied. Asking user for it.");
-            requestPermissions(call);
+            Log.v(getLogTag(), "Permission '" + PUBLIC_STORAGE + "' denied. Asking user for it.");
+            requestPermissionForAlias(PUBLIC_STORAGE, call, "permissionCallback");
             return false;
         }
     }
@@ -133,11 +156,22 @@ public class Http extends Plugin {
     public void downloadFile(final PluginCall call) {
         try {
             bridge.saveCall(call);
-            String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+            String path = call.getString("filePath");
+            if (path == null) {
+                call.reject("filePath not provided");
+                return;
+            }
+
+            File file = FilesystemUtils.getFileObject(getContext(), path, call.getString("fileDirectory"));
+
+            if (file == null) {
+                call.reject("Could not find file" + path);
+                return;
+            }
 
             if (
-                !FilesystemUtils.isPublicDirectory(fileDirectory) ||
-                isStoragePermissionGranted(call, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                !FilesystemUtils.isPublicDirectory(file.getParent()) ||
+                isStoragePermissionGranted(call)
             ) {
                 call.release(bridge);
 
@@ -164,7 +198,7 @@ public class Http extends Plugin {
                         };
                 }
 
-                JSObject response = HttpRequestHandler.downloadFile(call, getContext(), emitter);
+                JSObject response = HttpRequestHandler.downloadFile(call, file, getContext(), emitter);
                 call.resolve(response);
             }
         } catch (MalformedURLException ex) {
@@ -179,16 +213,59 @@ public class Http extends Plugin {
     @PluginMethod
     public void uploadFile(PluginCall call) {
         try {
-            String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+            String path = call.getString("filePath");
+            if (path == null) {
+                call.reject("filePath not provided");
+                return;
+            }
+
+            File file = FilesystemUtils.getFileObject(getContext(), path, call.getString("fileDirectory"));
+
+            if (file == null) {
+                call.reject("Could not find file" + path);
+                return;
+            }
+
             bridge.saveCall(call);
 
             if (
-                !FilesystemUtils.isPublicDirectory(fileDirectory) ||
-                isStoragePermissionGranted(call, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                !FilesystemUtils.isPublicDirectory(file.getParent()) ||
+                isStoragePermissionGranted(call)
             ) {
                 call.release(bridge);
-                JSObject response = HttpRequestHandler.uploadFile(call, getContext());
-                call.resolve(response);
+                HttpRequestHandler.uploadFile(call, file, getContext());
+                // Don't release the call here since we need it for the async response
+            }
+        } catch (Exception ex) {
+            call.reject("Error", ex);
+        }
+    }
+
+    @PluginMethod
+    public void uploadImage(PluginCall call) {
+        try {
+            String path = call.getString("filePath");
+            if (path == null) {
+                call.reject("filePath not provided");
+                return;
+            }
+
+            File file = FilesystemUtils.getFileObject(getContext(), path, call.getString("fileDirectory"));
+
+            if (file == null) {
+                call.reject("Could not find file" + path);
+                return;
+            }
+
+            bridge.saveCall(call);
+
+            if (
+                !FilesystemUtils.isPublicDirectory(file.getParent()) ||
+                isStoragePermissionGranted(call)
+            ) {
+                call.release(bridge);
+                HttpRequestHandler.uploadImage(call, file, getContext());
+                // Don't release the call here since we need it for the async response
             }
         } catch (Exception ex) {
             call.reject("Error", ex);

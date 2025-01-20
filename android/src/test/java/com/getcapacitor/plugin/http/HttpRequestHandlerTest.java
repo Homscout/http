@@ -1,6 +1,6 @@
 package com.getcapacitor.plugin.http;
 
-import static com.getcapacitor.plugin.http.HttpRequestHandler.ResponseType.JSON;
+import static com.getcapacitor.plugin.http.ResponseType.JSON;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 
@@ -20,7 +20,7 @@ public class HttpRequestHandlerTest {
     @Test
     public void readData_error_with_HTML_message() throws IOException, JSONException {
         MutableBoolean isError = new MutableBoolean(false);
-        String result = (String) HttpRequestHandler.readData(errorWithHtmlMessage("html-error"), JSON);
+        String result = (String) HttpResponseBuilder.readData(errorWithHtmlMessage("html-error"), JSON);
 
         assertEquals("html-error", result);
     }
@@ -29,7 +29,7 @@ public class HttpRequestHandlerTest {
     public void readData_error_with_JSON() throws IOException, JSONException {
         JSObject jsonObject = new JSObject("{ 'message' : 'Hello world!' }");
 
-        JSObject result = (JSObject) HttpRequestHandler.readData(errorWithJson(jsonObject), JSON);
+        JSObject result = (JSObject) HttpResponseBuilder.readData(errorWithJson(jsonObject), JSON);
 
         assertEquals(jsonObject.toString(), result.toString());
     }
@@ -38,7 +38,7 @@ public class HttpRequestHandlerTest {
     public void readData_success_with_JSON() throws IOException, JSONException {
         JSObject jsonObject = new JSObject("{ 'message' : 'Hello world!' }");
 
-        JSObject result = (JSObject) HttpRequestHandler.readData(successWithJson(jsonObject), JSON);
+        JSObject result = (JSObject) HttpResponseBuilder.readData(successWithJson(jsonObject), JSON);
 
         assertEquals(jsonObject.toString(), result.toString());
     }

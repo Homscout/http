@@ -1,6 +1,6 @@
 [
   {
-    "pkg": "@capacitor-mobi/http",
+    "pkg": "@leadscout/http",
     "classpath": "com.getcapacitor.plugin.http.Http"
   }
 ]
