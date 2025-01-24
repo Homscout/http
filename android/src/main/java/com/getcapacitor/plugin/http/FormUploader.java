@@ -101,7 +101,7 @@ public class FormUploader {
         if (data != null && data.has("key")) {
             try {
                 appendFieldToWriter("key", data.getString("key"));
-            } catch (JSONException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }

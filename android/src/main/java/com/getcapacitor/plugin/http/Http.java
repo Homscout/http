@@ -196,6 +196,25 @@ public class Http extends Plugin {
     }
 
     @PluginMethod
+    public void uploadImage(PluginCall call) {
+        try {
+            String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+            bridge.saveCall(call);
+
+            if (
+                !FilesystemUtils.isPublicDirectory(fileDirectory) ||
+                isStoragePermissionGranted(call, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            ) {
+                call.release(bridge);
+                JSObject response = HttpRequestHandler.uploadFile(call, getContext());
+                call.resolve(response);
+            }
+        } catch (Exception ex) {
+            call.reject("Error", ex);
+        }
+    }
+
+    @PluginMethod
     public void setCookie(PluginCall call) {
         String key = call.getString("key");
         String value = call.getString("value");

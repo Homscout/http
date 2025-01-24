@@ -216,40 +216,36 @@ class HttpRequestHandler {
         task.resume();
     }
 
-    public static func upload(_ call: CAPPluginCall) throws {
+    private static func performUpload(_ call: CAPPluginCall, fileUrl: URL) throws {
         let name = call.getString("name") ?? "file"
         let method = call.getString("method") ?? "POST"
-        let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
         let headers = (call.getObject("headers") ?? [:]) as! [String: String]
         let params = (call.getObject("params") ?? [:]) as! [String: Any]
         let body = (call.getObject("data") ?? [:]) as [String: Any]
-        let responseType = call.getString("responseType") ?? "text";
-        let connectTimeout = call.getDouble("connectTimeout");
-        let readTimeout = call.getDouble("readTimeout");
-
+        let responseType = call.getString("responseType") ?? "text"
+        let connectTimeout = call.getDouble("connectTimeout")
+        let readTimeout = call.getDouble("readTimeout")
+        
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
-        guard let filePath = call.getString("filePath") else { throw URLError(.badURL) }
-        guard let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else { throw URLError(.badURL) }
-
+                
         let request = try! CapacitorHttpRequestBuilder()
             .setUrl(urlString)
             .setMethod(method)
             .setUrlParams(params)
             .openConnection()
-            .build();
+            .build()
 
         request.setRequestHeaders(headers)
-
-        // Timeouts in iOS are in seconds. So read the value in millis and divide by 1000
-        let timeout = (connectTimeout ?? readTimeout ?? 600000.0) / 1000.0;
-        request.setTimeout(timeout)
+        request.setTimeout((connectTimeout ?? readTimeout ?? 600000.0) / 1000.0)
 
         let boundary = UUID().uuidString
-        request.setContentType("multipart/form-data; boundary=\(boundary)");
+        request.setContentType("multipart/form-data; boundary=\(boundary)")
 
-        guard let form = try? generateMultipartForm(fileUrl, name, boundary, body) else { throw URLError(.cannotCreateFile) }
+        guard let form = try? generateMultipartForm(fileUrl, name, boundary, body) else {
+            throw URLError(.cannotCreateFile)
+        }
 
-        let urlRequest = request.getUrlRequest();
+        let urlRequest = request.getUrlRequest()
         let task = URLSession.shared.uploadTask(with: urlRequest, from: form) { (data, response, error) in
             if error != nil {
                 CAPLog.print("Error on upload file", String(describing: data), String(describing: response), String(describing: error))
@@ -261,6 +257,31 @@ class HttpRequestHandler {
         }
 
         task.resume()
+    }
+
+    public static func upload(_ call: CAPPluginCall) throws {
+        let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
+        guard let filePath = call.getString("filePath"),
+              let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else {
+            throw URLError(.badURL)
+        }
+        try performUpload(call, fileUrl: fileUrl)
+    }
+
+    public static func uploadImage(_ call: CAPPluginCall) throws {
+        let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
+        guard let filePath = call.getString("filePath"),
+              let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else {
+            throw URLError(.badURL)
+        }
+        
+        let uploadUrl = if let resizeOptions = call.getObject("resize") {
+            ImageUtils.resizeImage(fileUrl, options: resizeOptions) ?? fileUrl
+        } else {
+            fileUrl
+        }
+        
+        try performUpload(call, fileUrl: uploadUrl)
     }
 
     public static func download(_ call: CAPPluginCall, updateProgress: @escaping ProgressEmitter) throws {

@@ -481,11 +481,10 @@ public class HttpRequestHandler {
      * @throws URISyntaxException thrown when the URI is malformed
      * @throws JSONException thrown when malformed JSON is passed into the function
      */
-    public static JSObject uploadFile(PluginCall call, Context context) throws IOException, URISyntaxException, JSONException {
+    private static JSObject performUpload(PluginCall call, Context context, File file)
+        throws IOException, URISyntaxException, JSONException {
         String urlString = call.getString("url");
         String method = call.getString("method", "POST").toUpperCase();
-        String filePath = call.getString("filePath");
-        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
         String name = call.getString("name", "file");
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
@@ -495,8 +494,6 @@ public class HttpRequestHandler {
         ResponseType responseType = ResponseType.parse(call.getString("responseType"));
 
         URL url = new URL(urlString);
-
-        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
 
         HttpURLConnectionBuilder connectionBuilder = new HttpURLConnectionBuilder()
             .setUrl(url)
@@ -515,6 +512,26 @@ public class HttpRequestHandler {
         builder.finish();
 
         return buildResponse(connection, responseType);
+    }
+
+    public static JSObject uploadFile(PluginCall call, Context context) throws IOException, URISyntaxException, JSONException {
+        String filePath = call.getString("filePath");
+        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
+        return performUpload(call, context, file);
+    }
+
+    public static JSObject uploadImage(PluginCall call, Context context) throws IOException, URISyntaxException, JSONException {
+        String filePath = call.getString("filePath");
+        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
+
+        JSObject resizeOptions = call.getObject("resize");
+        if (resizeOptions != null) {
+            file = ImageUtils.resizeImage(context, file, resizeOptions);
+        }
+
+        return performUpload(call, context, file);
     }
 
     @FunctionalInterface
