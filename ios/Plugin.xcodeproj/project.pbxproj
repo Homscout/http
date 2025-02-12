@@ -20,6 +20,7 @@
 		90F75FE425ECD8DA003A2E3A /* HttpRequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F75FE125ECD8DA003A2E3A /* HttpRequestHandler.swift */; };
 		90F75FE525ECD8DA003A2E3A /* CapacitorUrlRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F75FE225ECD8DA003A2E3A /* CapacitorUrlRequest.swift */; };
 		C22A52A22D441F980089F1A3 /* ImageUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22A52A12D441F980089F1A3 /* ImageUtils.swift */; };
+		C2E07D8D2D5CEC28004EFCC4 /* UploadQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E07D8C2D5CEC28004EFCC4 /* UploadQueue.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +52,7 @@
 		91781294A431A2A7CC6EB714 /* Pods-Plugin.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Plugin.release.xcconfig"; path = "Pods/Target Support Files/Pods-Plugin/Pods-Plugin.release.xcconfig"; sourceTree = "<group>"; };
 		96ED1B6440D6672E406C8D19 /* Pods-PluginTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PluginTests.debug.xcconfig"; path = "Pods/Target Support Files/Pods-PluginTests/Pods-PluginTests.debug.xcconfig"; sourceTree = "<group>"; };
 		C22A52A12D441F980089F1A3 /* ImageUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtils.swift; sourceTree = "<group>"; };
+		C2E07D8C2D5CEC28004EFCC4 /* UploadQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadQueue.swift; sourceTree = "<group>"; };
 		F65BB2953ECE002E1EF3E424 /* Pods-PluginTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PluginTests.release.xcconfig"; path = "Pods/Target Support Files/Pods-PluginTests/Pods-PluginTests.release.xcconfig"; sourceTree = "<group>"; };
 		F6753A823D3815DB436415E3 /* Pods_PluginTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_PluginTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -100,6 +102,7 @@
 		50ADFF8A201F53D600D50D53 /* Plugin */ = {
 			isa = PBXGroup;
 			children = (
+				C2E07D8C2D5CEC28004EFCC4 /* UploadQueue.swift */,
 				90F75FE025ECD8DA003A2E3A /* CapacitorCookieManager.swift */,
 				90F75FE225ECD8DA003A2E3A /* CapacitorUrlRequest.swift */,
 				50AE585A245BCD5300EC74FC /* FilesystemUtils.swift */,
@@ -323,6 +326,7 @@
 				50ADFFA82020EE4F00D50D53 /* Plugin.m in Sources */,
 				90F75FE325ECD8DA003A2E3A /* CapacitorCookieManager.swift in Sources */,
 				90F75FE425ECD8DA003A2E3A /* HttpRequestHandler.swift in Sources */,
+				C2E07D8D2D5CEC28004EFCC4 /* UploadQueue.swift in Sources */,
 				50AE585B245BCD5300EC74FC /* FilesystemUtils.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

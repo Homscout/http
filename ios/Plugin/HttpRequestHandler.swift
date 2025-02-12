@@ -224,6 +224,8 @@ class HttpRequestHandler {
         let responseType = call.getString("responseType") ?? "text"
         let connectTimeout = call.getDouble("connectTimeout")
         let readTimeout = call.getDouble("readTimeout")
+        let uploadId = fileUrl.lastPathComponent
+        CAPLog.print("🆕 Preparing upload \(uploadId) for file: \(fileUrl.lastPathComponent)")
         
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
                 
@@ -245,7 +247,15 @@ class HttpRequestHandler {
         }
 
         let urlRequest = request.getUrlRequest()
-        let task = URLSession.shared.uploadTask(with: urlRequest, from: form) { (data, response, error) in
+        
+        // Create an upload operation
+        let operation = UploadOperation(
+            urlRequest: urlRequest,
+            form: form,
+            uploadId: uploadId,
+            connectTimeout: connectTimeout,
+            readTimeout: readTimeout
+        ) { data, response, error in
             if error != nil {
                 CAPLog.print("Error on upload file", String(describing: data), String(describing: response), String(describing: error))
                 call.reject("Error", "UPLOAD", error, [:])
@@ -255,7 +265,8 @@ class HttpRequestHandler {
             call.resolve(self.buildResponse(data, response as! HTTPURLResponse, responseType: type))
         }
 
-        task.resume()
+        // Add to queue instead of starting immediately
+        UploadQueue.shared.addUpload(operation)
     }
 
     public static func upload(_ call: CAPPluginCall) throws {

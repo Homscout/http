@@ -1,6 +1,6 @@
 {
   "name": "@leadscout/http",
-  "version": "7.0.0-rc1",
+  "version": "7.0.0-rc4",
   "description": "A native HTTP plugin for CORS-free requests and file transfers",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",

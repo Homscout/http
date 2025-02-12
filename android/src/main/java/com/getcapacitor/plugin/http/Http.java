@@ -188,8 +188,8 @@ public class Http extends Plugin {
                 isStoragePermissionGranted(call, Manifest.permission.WRITE_EXTERNAL_STORAGE)
             ) {
                 call.release(bridge);
-                JSObject response = HttpRequestHandler.uploadFile(call, getContext());
-                call.resolve(response);
+                HttpRequestHandler.uploadFile(call, getContext());
+                // Don't release the call here since we need it for the async response
             }
         } catch (Exception ex) {
             call.reject("Error", ex);
@@ -207,8 +207,8 @@ public class Http extends Plugin {
                 isStoragePermissionGranted(call, Manifest.permission.WRITE_EXTERNAL_STORAGE)
             ) {
                 call.release(bridge);
-                JSObject response = HttpRequestHandler.uploadFile(call, getContext());
-                call.resolve(response);
+                HttpRequestHandler.uploadImage(call, getContext());
+                // Don't release the call here since we need it for the async response
             }
         } catch (Exception ex) {
             call.reject("Error", ex);

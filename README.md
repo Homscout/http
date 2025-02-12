@@ -29,6 +29,7 @@ This fork adds a few updates:
    - Resizing an image before upload
    - Adding custom metadata headers (width, height, size), which are all common for image uploads.
    - Support S3 uploads - the order of the form data matters for S3.
+3. Added upload queue for files and images to support controlled concurrency of uploads
 
 ## Installation
 
