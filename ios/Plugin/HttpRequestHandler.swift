@@ -122,48 +122,7 @@ class HttpRequestHandler {
         return output
     }
 
-    private static func generateMultipartForm(_ url: URL, _ name: String, _ boundary: String, _ body: [String:Any]) throws -> Data {
-        var data = Data()
-        var remainingBody = body
-
-        // Handle 'key' field first
-        if let keyValue = body["key"] as? String {
-            data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-            data.append("Content-Disposition: form-data; name=\"key\"\r\n\r\n".data(using: .utf8)!)
-            data.append(keyValue.data(using: .utf8)!)
-            remainingBody.removeValue(forKey: "key")
-        }
-
-        // Handle remaining fields
-        remainingBody.forEach { key, value in
-            if let stringArray = value as? [String] {
-                for item in stringArray {
-                    data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-                    data.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".data(using: .utf8)!)
-                    data.append(item.data(using: .utf8)!)
-                }
-            } else {
-                data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-                data.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".data(using: .utf8)!)
-                data.append((value as! String).data(using: .utf8)!)
-            }
-        }
-
-        // Add file data
-        let fileData = try Data(contentsOf: url)
-        let fname = url.lastPathComponent
-        let mimeType = FilesystemUtils.mimeTypeForPath(path: fname)
-        data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
-        data.append(
-            "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fname)\"\r\n".data(
-                using: .utf8)!)
-        data.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-        data.append(fileData)
-
-        data.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-
-        return data
-    }
+   
 
     public static func request(_ call: CAPPluginCall, _ httpMethod: String?) throws {
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
@@ -216,17 +175,17 @@ class HttpRequestHandler {
         task.resume();
     }
 
-    private static func performUpload(_ call: CAPPluginCall, fileUrl: URL, body: [String: Any]) throws {
-        let name = call.getString("name") ?? "file"
+    private static func performUpload(_ call: CAPPluginCall) throws {
+        let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
+        guard let filePath = call.getString("filePath"),
+              let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else {
+            throw URLError(.badURL)
+        }
         let method = call.getString("method") ?? "POST"
         let params = (call.getObject("params") ?? [:]) as! [String: Any]
         let headers = (call.getObject("headers") ?? [:]) as! [String: String]
         let responseType = call.getString("responseType") ?? "text"
-        let connectTimeout = call.getDouble("connectTimeout")
-        let readTimeout = call.getDouble("readTimeout")
-        let uploadId = fileUrl.lastPathComponent
-        CAPLog.print("🆕 Preparing upload \(uploadId) for file: \(fileUrl.lastPathComponent)")
-        
+
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
                 
         let request = try! CapacitorHttpRequestBuilder()
@@ -237,24 +196,25 @@ class HttpRequestHandler {
             .build()
 
         request.setRequestHeaders(headers)
-        request.setTimeout((connectTimeout ?? readTimeout ?? 600000.0) / 1000.0)
 
         let boundary = UUID().uuidString
         request.setContentType("multipart/form-data; boundary=\(boundary)")
-
-        guard let form = try? generateMultipartForm(fileUrl, name, boundary, body) else {
-            throw URLError(.cannotCreateFile)
-        }
 
         let urlRequest = request.getUrlRequest()
         
         // Create an upload operation
         let operation = UploadOperation(
             urlRequest: urlRequest,
-            form: form,
-            uploadId: uploadId,
-            connectTimeout: connectTimeout,
-            readTimeout: readTimeout
+            fileUrl: fileUrl,
+            body: (call.getObject("data") ?? [:]) as [String: Any],
+            boundary: boundary,
+            name: call.getString("name") ?? "file",
+            connectTimeout: call.getDouble("connectTimeout"),
+            readTimeout: call.getDouble("readTimeout"),
+            resizeOptions: call.getObject("resize"),
+            widthHeader: call.getString("widthHeader") ?? "X-Image-Width",
+            heightHeader: call.getString("heightHeader") ?? "X-Image-Height",
+            sizeHeader: call.getString("sizeHeader") ?? "X-Image-Size"
         ) { data, response, error in
             if error != nil {
                 CAPLog.print("Error on upload file", String(describing: data), String(describing: response), String(describing: error))
@@ -270,46 +230,11 @@ class HttpRequestHandler {
     }
 
     public static func upload(_ call: CAPPluginCall) throws {
-        let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
-        guard let filePath = call.getString("filePath"),
-              let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else {
-            throw URLError(.badURL)
-        }
-        try performUpload(call, fileUrl: fileUrl, body: call.getObject("data", [:]))
+        try performUpload(call)
     }
 
     public static func uploadImage(_ call: CAPPluginCall) throws {
-        let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
-        guard let filePath = call.getString("filePath"),
-              let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else {
-            throw URLError(.badURL)
-        }
-
-        // Get header names from options or use defaults
-        let widthHeader = call.getString("widthHeader") ?? "X-Image-Width"
-        let heightHeader = call.getString("heightHeader") ?? "X-Image-Height"
-        let sizeHeader = call.getString("sizeHeader") ?? "X-File-Size"
-        
-        let (uploadUrl, metadata) = if let resizeOptions = call.getObject("resize") {
-            if let result = ImageUtils.resizeImage(fileUrl, options: resizeOptions) {
-                (result.url, [
-                    widthHeader: "\(result.width)",
-                    heightHeader: "\(result.height)",
-                    sizeHeader: "\(result.fileSize)"
-                ])
-            } else {
-                (fileUrl, [:])
-            }
-        } else {
-            (fileUrl, [:])
-        }
-        
-        // Get existing headers and merge with metadata
-        var body = (call.getObject("data") ?? [:]) as [String: Any]
-        body.merge(metadata) { (_, new) in new }
-       
-        
-        try performUpload(call, fileUrl: uploadUrl, body: body)
+        try performUpload(call)
     }
 
     public static func download(_ call: CAPPluginCall, updateProgress: @escaping ProgressEmitter) throws {
