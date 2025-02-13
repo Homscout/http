@@ -3,6 +3,8 @@ package com.getcapacitor.plugin.http;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.text.format.Formatter;
+import android.util.Log;
 import com.getcapacitor.JSObject;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,7 +26,7 @@ public class ImageUtils {
         }
     }
 
-    public static ImageResult resizeImage(Context context, File file, JSObject options) {
+    public static ImageResult resizeImage(Context context, File file, JSObject options, String id) {
         try {
             int maxWidth = options.optInt("maxWidth", Integer.MAX_VALUE);
             int maxHeight = options.optInt("maxHeight", Integer.MAX_VALUE);
@@ -56,14 +58,20 @@ public class ImageUtils {
             bitmap.recycle();
             resized.recycle();
 
+            Log.d("ImageUtils", "📦 Resized image " + id + " to " + Formatter.formatShortFileSize(context, tempFile.length()));
+
             return new ImageResult(tempFile, scaledWidth, scaledHeight, tempFile.length());
         } catch (Exception e) {
             e.printStackTrace();
             // Get original dimensions even if resize fails
-            BitmapFactory.Options bmOptions = new BitmapFactory.Options();
-            bmOptions.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(file.getAbsolutePath(), bmOptions);
-            return new ImageResult(file, bmOptions.outWidth, bmOptions.outHeight, file.length());
+            return getImageResult(file);
         }
+    }
+
+    public static ImageResult getImageResult(File file) {
+        BitmapFactory.Options bmOptions = new BitmapFactory.Options();
+        bmOptions.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(file.getAbsolutePath(), bmOptions);
+        return new ImageResult(file, bmOptions.outWidth, bmOptions.outHeight, file.length());
     }
 }

@@ -1,8 +1,6 @@
 package com.getcapacitor.plugin.http;
 
 import android.content.Context;
-import android.graphics.BitmapFactory;
-import android.util.Log;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
 import java.io.File;
@@ -12,6 +10,7 @@ import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Objects;
+import java.util.UUID;
 import org.json.JSONException;
 
 public class HttpRequestHandler {
@@ -133,63 +132,69 @@ public class HttpRequestHandler {
     /**
      * Makes an Http Request to upload a file based on the PluginCall parameters
      * @param call The Capacitor PluginCall that contains the options need for an Http request
-     * @param data The data for the multipart upload
+     * @param context Application environment context
      */
-    private static void performUpload(PluginCall call, File file, JSObject data) {
-        String uploadId = file.getName();
-        Log.d("UploadQueue", "🆕 Preparing upload " + uploadId + " for file: " + file.getName());
+    private static void performUpload(PluginCall call, Context context) {
+        String filePath = call.getString("filePath");
+        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
+        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
 
-        // Create upload task
-        UploadTask task = new UploadTask(call, file, data, uploadId);
+        if (file == null) {
+            call.reject("Could not find file " + filePath);
+            return;
+        }
 
-        // Add to queue
-        UploadQueue.getInstance().addUpload(task);
+        try {
+            CapacitorHttpUrlConnection connection = new HttpURLConnectionBuilder()
+                    .setUrl(new URL(call.getString("url")))
+                    .setMethod(Objects.requireNonNull(call.getString("method", "POST")).toUpperCase())
+                    .setHeaders(call.getObject("headers"))
+                    .setUrlParams(call.getObject("params"))
+                    .setConnectTimeout(call.getInt("connectTimeout"))
+                    .setReadTimeout(call.getInt("readTimeout"))
+                    .openConnection()
+                    .build();
+
+            connection.setDoOutput(true);
+
+            // Create upload task
+            UploadTask task = new UploadTask(
+                connection,
+                file,
+                call.getObject("data", new JSObject()),
+                call.getObject("resize"), call.getString("id", UUID.randomUUID().toString()),
+                call.getString("name", "file"),
+                call.getString("widthHeader", "X-Image-Width"),
+                call.getString("heightHeader", "X-Image-Height"),
+                call.getString("sizeHeader", "X-File-Size"),
+                ResponseType.parse(call.getString("responseType")),
+                context,
+                new UploadTaskCallback() {
+                    @Override
+                    public void onSuccess(JSObject response) {
+                        call.resolve(response);
+                    }
+
+                    @Override
+                    public void onError(String message, String code, Exception error) {
+                        call.reject(message, code, error);
+                    }
+                }
+            );
+
+            // Add to queue
+            UploadQueue.getInstance().addUpload(task);
+        } catch (Exception e) {
+            call.reject("Error", e);
+        }
     }
 
     public static void uploadFile(PluginCall call, Context context) {
-        String filePath = call.getString("filePath");
-        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
-        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
-        assert file != null;
-        performUpload(call, file, call.getObject("data"));
+        performUpload(call, context);
     }
 
     public static void uploadImage(PluginCall call, Context context) {
-        String filePath = call.getString("filePath");
-        String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
-        File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
-        assert file != null;
-
-        // Get header names from options or use defaults
-        String widthHeader = call.getString("widthHeader", "X-Image-Width");
-        String heightHeader = call.getString("heightHeader", "X-Image-Height");
-        String sizeHeader = call.getString("sizeHeader", "X-File-Size");
-
-        // Get existing data or create new
-        JSObject data = call.getObject("data", new JSObject());
-        assert data != null;
-
-        File uploadFile;
-
-        JSObject resizeOptions = call.getObject("resize");
-        if (resizeOptions != null) {
-            ImageUtils.ImageResult result = ImageUtils.resizeImage(context, file, resizeOptions);
-            uploadFile = result.file;
-
-            data.put(widthHeader, String.valueOf(result.width));
-            data.put(heightHeader, String.valueOf(result.height));
-            data.put(sizeHeader, String.valueOf(result.fileSize));
-        } else {
-            uploadFile = file;
-            BitmapFactory.Options bmOptions = new BitmapFactory.Options();
-            bmOptions.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(file.getAbsolutePath(), bmOptions);
-            data.put(widthHeader, String.valueOf(bmOptions.outWidth));
-            data.put(heightHeader, String.valueOf(bmOptions.outHeight));
-            data.put(sizeHeader, String.valueOf(file.length()));
-        }
-
-        performUpload(call, uploadFile, data);
+        performUpload(call, context);
     }
 
     @FunctionalInterface

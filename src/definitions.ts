@@ -22,14 +22,9 @@ export interface HttpPlugin {
   uploadFile(options: HttpUploadFileOptions): Promise<HttpUploadFileResult>;
   uploadImage(options: HttpUploadImageOptions): Promise<HttpUploadFileResult>;
   chunkUpload(options: HttpUploadFileOptions): Promise<HttpUploadFileResult>;
-  downloadFile(
-    options: HttpDownloadFileOptions,
-  ): Promise<HttpDownloadFileResult>;
+  downloadFile(options: HttpDownloadFileOptions): Promise<HttpDownloadFileResult>;
 
-  addListener(
-    eventName: 'progress',
-    listenerFunc: HttpProgressListener,
-  ): Promise<PluginListenerHandle>;
+  addListener(eventName: 'progress', listenerFunc: HttpProgressListener): Promise<PluginListenerHandle>;
 
   removeAllListeners(): Promise<void>;
 }
@@ -148,12 +143,21 @@ export interface HttpUploadImageOptions extends HttpOptions {
    */
   fileDirectory?: Directory;
 
+  /**
+   * Optional resizing parameters. The image will be resized according to these parameters
+   * before uploading.
+   */
   resize?: {
     maxWidth?: number;
     maxHeight?: number;
     quality?: number; // 0-100
     format?: 'jpg' | 'png'; // Default jpg
   };
+
+  /**
+   * Optionally, the application-provided ID of the file being uploaded. Primarily used for debug logging
+   */
+  id?: string;
 
   /**
    * Optional name override of "width" metadata header. Defaults to X-Image-Width

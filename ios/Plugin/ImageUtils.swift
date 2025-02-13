@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Capacitor
 
 struct ImageResult {
     let url: URL
@@ -9,7 +10,7 @@ struct ImageResult {
 }
 
 class ImageUtils {
-    static func resizeImage(_ url: URL, options: [String: Any]) -> ImageResult? {
+    static func resizeImage(_ url: URL, options: [String: Any], id: String) -> ImageResult? {
         return autoreleasepool {
             guard let image = UIImage(contentsOfFile: url.path) else { return Optional.none }
                         
@@ -53,6 +54,8 @@ class ImageUtils {
                     fileSize = Int64(data.count)
                 }
             }
+            
+            CAPLog.print("📦 Resized image \(id) to \(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: ByteCountFormatter.CountStyle.binary)) bytes")
                         
             return ImageResult(
                 url: tempUrl,

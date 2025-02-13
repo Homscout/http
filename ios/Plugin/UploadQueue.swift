@@ -12,16 +12,19 @@ class UploadQueue {
     static let shared = UploadQueue()
     private let queue = OperationQueue()
     private let currentMaxConcurrent = 3
+    private let urlSession: URLSession
     
     private init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60 * 5 // 5 minute timeout for initial connection
+        config.timeoutIntervalForResource = 60 * 30 // 30 minute timeout for resource
+        urlSession = URLSession(configuration: config)
         queue.maxConcurrentOperationCount = currentMaxConcurrent
+        queue.qualityOfService = .userInitiated
     }
     
-    func getUploadSession(connectTimeout: Double? = nil, readTimeout: Double? = nil) -> URLSession {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForResource = (readTimeout ?? 300000.0) / 1000.0
-        config.timeoutIntervalForRequest = (connectTimeout ?? 60000.0) / 1000.0
-        return URLSession(configuration: config)
+    func getUploadSession() -> URLSession {
+        return urlSession
     }
     
     func addUpload(_ operation: Operation) {
@@ -39,21 +42,17 @@ class UploadQueue {
     let boundary: String
     let completion: @Sendable (Data?, URLResponse?, Error?) -> Void
     let uploadId: String
-    let connectTimeout: Double?
-    let readTimeout: Double?
     let resizeOptions: JSObject?
     let widthHeader: String
     let heightHeader: String
     let sizeHeader: String
-    static let UPLOAD_TIMEOUT = 600.0 // 10 minutes
     
     init(urlRequest: URLRequest,
          fileUrl: URL,
          body: [String: Any],
          boundary: String,
          name: String,
-         connectTimeout: Double?,
-         readTimeout: Double?,
+         uploadId: String,
          resizeOptions: JSObject?,
          widthHeader: String,
          heightHeader: String,
@@ -64,9 +63,7 @@ class UploadQueue {
         self.body = body
         self.boundary = boundary
         self.paramName = name
-        self.uploadId =  fileUrl.lastPathComponent
-        self.connectTimeout = connectTimeout
-        self.readTimeout = readTimeout
+        self.uploadId =  uploadId
         self.resizeOptions = resizeOptions
         self.widthHeader = widthHeader
         self.heightHeader = heightHeader
@@ -84,52 +81,43 @@ class UploadQueue {
         let startTime = Date()
         CAPLog.print("▶️ Starting upload \(uploadId) at \(startTime)")
         
-        Task {
-            do {
-                // Handle image resizing if needed
-                let (finalUrl, metadata) = {
-                    if let resizeOptions = resizeOptions {
-                        if let result = ImageUtils.resizeImage(fileUrl, options: resizeOptions) {
-                            return (result.url, [
-                                widthHeader: "\(result.width)",
-                                heightHeader: "\(result.height)",
-                                sizeHeader: "\(result.fileSize)"
-                            ])
-                        }
+        do {
+            // Handle image resizing if needed
+            let (finalUrl, metadata) = {
+                if let resizeOptions = resizeOptions {
+                    if let result = ImageUtils.resizeImage(fileUrl, options: resizeOptions, id: uploadId) {
+                        return (result.url, [
+                            widthHeader: "\(result.width)",
+                            heightHeader: "\(result.height)",
+                            sizeHeader: "\(result.fileSize)"
+                        ])
                     }
-                    
-                    // For both the resize-fail and no-resize cases
-                    if let metadata = try? getImageMetadata(fileUrl) {
-                        return (fileUrl, metadata)
-                    }
-                    return (fileUrl, [:])
-                }()
-                
-                // Merge metadata into the body
-                let updatedBody = body.merging(metadata) { (_, new) in new }
-
-                guard let form = UploadOperation.generateMultipartForm(fileUrl, paramName, boundary, updatedBody) else {
-                    throw URLError(.cannotCreateFile)
                 }
                 
-                CAPLog.print("📦 File size for \(uploadId): \(ByteCountFormatter.string(fromByteCount: Int64(body.count), countStyle: .file))")
-                
-                let session = UploadQueue.shared.getUploadSession(connectTimeout: connectTimeout, readTimeout: readTimeout)
-                let (data, response) = try await session.upload(for: urlRequest, from: form)
-                                
-                if let httpResponse = response as? HTTPURLResponse {
-                    CAPLog.print("✅ Upload \(uploadId) completed with status: \(httpResponse.statusCode)")
-                    CAPLog.print("⏱️ Duration for \(uploadId): \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
+                // For both the resize-fail and no-resize cases
+                if let metadata = try? getImageMetadata(fileUrl) {
+                    return (fileUrl, metadata)
                 }
-                
-                completion(data, response, nil)
-                
-            } catch {
-                CAPLog.print("❌ Upload \(uploadId) failed after \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s: \(error.localizedDescription)")
-                completion(nil, nil, error)
-            }
+                return (fileUrl, [:])
+            }()
             
-            CAPLog.print("🏁 Upload \(uploadId) operation finished")
+            let form = try generateMultipartForm(finalUrl, body.merging(metadata) { (_, new) in new })
+            
+            let task = UploadQueue.shared.getUploadSession().uploadTask(with: urlRequest, from: form) { (data, response, error) in
+                if let error = error {
+                    CAPLog.print("❌ Upload \(self.uploadId) failed after \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s: \(error)")
+                    self.completion(nil, nil, error)
+                } else {
+                    CAPLog.print("✅ Upload \(self.uploadId) success: \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
+                    self.completion(data, response, nil)
+                }
+            }
+
+            task.resume()
+        } catch {
+            CAPLog.print("❌ Upload \(uploadId) failed: \(error)")
+            self.completion(nil, nil, error)
+
         }
     }
     
@@ -150,7 +138,7 @@ class UploadQueue {
         ]
     }
     
-    private static func generateMultipartForm(_ url: URL, _ name: String, _ boundary: String, _ body: [String:Any]) -> Data? {
+    private func generateMultipartForm(_ url: URL, _ body: [String:Any]) throws -> Data? {
         var data = Data()
         var remainingBody = body
 
@@ -178,12 +166,12 @@ class UploadQueue {
         }
 
         // Add file data
-        guard let fileData = try? Data(contentsOf: url) else { return nil }
+        let fileData = try Data(contentsOf: url)
         let fname = url.lastPathComponent
         let mimeType = FilesystemUtils.mimeTypeForPath(path: fname)
         data.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
         data.append(
-            "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fname)\"\r\n".data(
+            "Content-Disposition: form-data; name=\"\(paramName)\"; filename=\"\(fname)\"\r\n".data(
                 using: .utf8)!)
         data.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
         data.append(fileData)
